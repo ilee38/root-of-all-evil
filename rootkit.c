@@ -90,6 +90,10 @@ MODULE_AUTHOR("Maxim Biro <nurupo.contributions@gmail.com>");
 #define ARCH_ERROR_MESSAGE "Only i386 and x86_64 architectures are supported! " \
     "It should be easy to port to new architectures though"
 
+/* The write_cr0() macro is used to disable write protection (WP) on the CR register
+ * this will let the kernel read from WP locations.
+ * These steps are necesary to modify the sys call table.
+ */
 #define DISABLE_W_PROTECTED_MEMORY \
     do { \
         preempt_disable(); \
@@ -266,6 +270,9 @@ unsigned long read_count = 0;
  * The asmlinkage modifier is typically used with syscall functions. 
  * It tells the compiler to look for the function parameters in the stack,
  * rather than in the registers (for performance improvement).
+ *
+ * This is our version of the read() sys call, it will run every time the 
+ * the original read() is invoked
  */
 asmlinkage long read(unsigned int fd, char __user *buf, size_t count)
 {
@@ -279,6 +286,10 @@ asmlinkage long read(unsigned int fd, char __user *buf, size_t count)
 
 unsigned long write_count = 0;
 
+/*
+ * This is our version of the write() sys call, it will run every time the 
+ * original write() sys call is invoked.
+*/
 asmlinkage long write(unsigned int fd, const char __user *buf, size_t count)
 {
     write_count ++;
