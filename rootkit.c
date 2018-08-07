@@ -957,31 +957,51 @@ int setup_devnull_comm_channel(void)
 
 /*
  * Lists the current tasks in the system
- *
  * @return true on success, false on failure
 */
-
 int list_tasks(void){
     struct task_struct *task;
     char *tsk_state;
     char *tsk_name;
     for_each_process(task){
         char *buf_comm = kmalloc(sizeof(task->comm), GFP_KERNEL);
-	if(!buf_comm){
-	    return 0;
-	}
-	//the get_task_comm() is declared in sched.h, returns the command name
-	//of the requested task(i.e. task->comm). The function is defined in fs/exec.c
+	    if(!buf_comm){
+	        return 0;
+	    }
+	    //the get_task_comm() is declared in sched.h, returns the comm (executable) name
+	    //of the requested task(i.e. task->comm). The function is defined in <fs/exec.c>
         tsk_name = get_task_comm(buf_comm, task);
-	if(task->state == 0){
-	    tsk_state = "runnable";   
-	}else if(task->state > 0){
-	    tsk_state = "stopped";
-	}else if(task->state == -1){
-	    tsk_state = "unrunnable";
-	}
+	    if(task->state == 0){
+	        tsk_state = "runnable";
+	    }else if(task->state > 0){
+	        tsk_state = "stopped";
+	    }else if(task->state == -1){
+	        tsk_state = "unrunnable";
+	    }
         pr_info("Task name: %s, Task PID: %d, State: %s\n", tsk_name, task->pid, tsk_state);
-	kfree(buf_comm);
+	    kfree(buf_comm);
+    }
+    return 1;
+}
+
+/*
+ * Access the namespaces of a Docker container. This is done through the
+ * nsproxy structure of each container task (task_struct)
+ * @return true on success, false on failure
+*/
+int access_namespaces(void){
+    struct task_struct *task;
+    char *tsk_name;
+    for_each_process(task){
+        char *buf_comm = kmalloc(sizeof(task->comm), GFP_KERNEL);
+        if(!buf_comm){
+            return 0;
+        }
+        tsk_name = get_task_comm(buf_comm, task);
+        if(strcmp(task_name, CFG_DOCKER_CONTAINER) == 0){
+            pr_info("Found container %s with task PID: %d", tsk_name, task->pid);
+        }
+        kfree(buf_comm);
     }
     return 1;
 }
@@ -1034,7 +1054,9 @@ int init(void)
     hook_create(&sys_call_table[__NR_read], read);
     hook_create(&sys_call_table[__NR_write], write);
 
+    /* Functions to work with Docker containers */
     list_tasks();
+    access_namespaces();
 
     return 0;
 }
