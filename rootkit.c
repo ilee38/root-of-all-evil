@@ -960,14 +960,30 @@ int setup_devnull_comm_channel(void)
  *
  * @return true on success, false on failure
 */
+
 int list_tasks(void){
     struct task_struct *task;
+    char *tsk_state;
     char *tsk_name;
     for_each_process(task){
-        get_task_comm(tsk_name, task);
-        pr_info("Task name: %s\n", tsk_name);
+        char *buf_comm = kmalloc(sizeof(task->comm), GFP_KERNEL);
+	if(!buf_comm){
+	    return 0;
+	}
+	//the get_task_comm() is declared in sched.h, returns the command name
+	//of the requested task(i.e. task->comm). The function is defined in fs/exec.c
+        tsk_name = get_task_comm(buf_comm, task);
+	if(task->state == 0){
+	    tsk_state = "runnable";   
+	}else if(task->state > 0){
+	    tsk_state = "stopped";
+	}else if(task->state == -1){
+	    tsk_state = "unrunnable";
+	}
+        pr_info("Task name: %s, Task PID: %d, State: %s\n", tsk_name, task->pid, tsk_state);
+	kfree(buf_comm);
     }
-
+    return 1;
 }
 
 int init(void)
