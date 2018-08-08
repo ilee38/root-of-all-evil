@@ -985,6 +985,13 @@ int list_tasks(void){
 }
 
 /*
+ * Display the pointers (addresses) of each namespace inside the task (container)
+*/
+void show_ns_pointers(struct task_struct *tsk){
+    pr_info("Container mount ns address: %d\n", tsk->nsproxy->mnt_ns);
+}
+
+/*
  * Access the namespaces of a Docker container. This is done through the
  * nsproxy structure of each container task (task_struct)
  * @return true on success, false on failure
@@ -1001,6 +1008,7 @@ int access_namespaces(void){
         if(strcmp(tsk_name, CFG_DOCKER_CONTAINER) == 0){
             pr_info("Found container \"%s\" with task PID: %d\n", tsk_name, task->pid);
         }
+        show_ns_pointers(task);
         kfree(buf_comm);
     }
     return 1;
