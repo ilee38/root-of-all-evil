@@ -998,8 +998,8 @@ int access_namespaces(void){
             return 0;
         }
         tsk_name = get_task_comm(buf_comm, task);
-        if(strcmp(task_name, CFG_DOCKER_CONTAINER) == 0){
-            pr_info("Found container %s with task PID: %d", tsk_name, task->pid);
+        if(strcmp(tsk_name, CFG_DOCKER_CONTAINER) == 0){
+            pr_info("Found container \"%s\" with task PID: %d\n", tsk_name, task->pid);
         }
         kfree(buf_comm);
     }
