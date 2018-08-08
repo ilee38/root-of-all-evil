@@ -993,7 +993,7 @@ int access_namespaces(void){
     struct task_struct *task;
     char *tsk_name;
     for_each_process(task){
-        char *buf_comm = kmalloc(sizeof(CFG_DOCKER_CONTAINER), GFP_KERNEL);
+        char *buf_comm = kmalloc(sizeof(task->comm), GFP_KERNEL);
         if(!buf_comm){
             return 0;
         }

