@@ -988,6 +988,10 @@ int list_tasks(void){
  * Display the pointers (addresses) of each namespace inside the task (container)
 */
 void show_ns_pointers(struct task_struct *tsk){
+    if(tsk->children){
+        pr_info("This task has children\n");
+    }
+    /*
     pr_info("Container namespace info: \n");
     pr_info("---------------------------\n");
     pr_info("mnt_ns address: %p\n", tsk->nsproxy->mnt_ns);
@@ -995,6 +999,7 @@ void show_ns_pointers(struct task_struct *tsk){
     pr_info("pid_ns(for children) address: %p\n", tsk->nsproxy->pid_ns_for_children);
     pr_info("uts_ns address: %p\n", tsk->nsproxy->uts_ns);
     pr_info("ipc_ns address: %p\n", tsk->nsproxy->ipc_ns);
+    */
 }
 
 /*
@@ -1011,8 +1016,8 @@ int access_namespaces(void){
             return 0;
         }
         tsk_name = get_task_comm(buf_comm, task);
-        if(strcmp(tsk_name, CFG_DOCKER_CONTAINER) == 0 || strcmp(tsk_name, "dockerd") == 0){
-            pr_info("Found container \"%s\" with task PID: %d\n", tsk_name, task->pid);
+        if(strcmp(tsk_name, CFG_DOCKER_CONTAINER) == 0){
+            pr_info("Found containerd \"%s\" with task PID: %d\n", tsk_name, task->pid);
             show_ns_pointers(task);
 	}
         kfree(buf_comm);
