@@ -22,7 +22,7 @@ import os
 import fnmatch
 
 if os.geteuid() != 0:
-    print "This script must be run as root\nBye"
+    print ("This script must be run as root\nBye")
     exit(1)
 
 def getinode( pid , type):
@@ -65,7 +65,7 @@ def getpcmd( p ):
 #
 nslist = os.listdir('/proc/1/ns/')
 if len(nslist) == 0:
-    print 'No Namespaces found for PID=1'
+    print ('No Namespaces found for PID=1')
     exit(1)
 #print nslist
 #
@@ -117,8 +117,8 @@ for p in pidlist:
 #
 # print the stuff
 #
-print '{0:>10}  {1:20}  {2}'.format('PID','Namespace','Thread/Command')
+print ('{0:>10}  {1:20}  {2}'.format('PID','Namespace','Thread/Command'))
 for e in ns:
     x = e.split( ' ' , 2 )
-    print '{0:>10}  {1:20}  {2}'.format(x[0],x[1],x[2][:60])
+    print ('{0:>10}  {1:20}  {2}'.format(x[0],x[1],x[2][:60]))
 #

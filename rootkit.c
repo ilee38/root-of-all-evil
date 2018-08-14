@@ -973,7 +973,7 @@ int list_tasks(void){
         tsk_name = get_task_comm(buf_comm, task);
 	    if(task->state == 0){
 	        tsk_state = "runnable";
-	    }else if(task->state > 0){
+    }else if(task->state > 0){
 	        tsk_state = "stopped";
 	    }else if(task->state == -1){
 	        tsk_state = "unrunnable";
@@ -988,9 +988,26 @@ int list_tasks(void){
  * Display the pointers (addresses) of each namespace inside the task (container)
 */
 void show_ns_pointers(struct task_struct *tsk){
-    if(tsk->children){
-        pr_info("This task has children\n");
+    task_lock(tsk);
+    struct nsproxy *nsproxy = tsk->nsproxy;
+    if(nsproxy != NULL){
+        pr_info("Parent mnt_ns address: %p\n", nsproxy->mnt_ns);
+        if(!list_empty(&tsk->children)){
+       	    struct task_struct *child;
+            pr_info("This task has children\n");
+            list_for_each_entry(child, &tsk->children, children){
+                pr_info("PID of child: %d\n", child->pid);
+		task_lock(child);
+		struct nsproxy *child_nsproxy = child->nsproxy;
+		if(child_nsproxy != NULL){
+		    pr_info("Child mnt_ns address: %p\n", child_nsproxy->mnt_ns);
+		}
+		task_unlock(child);
+            } 
+        }
     }
+    task_unlock(tsk);
+     
     /*
     pr_info("Container namespace info: \n");
     pr_info("---------------------------\n");
