@@ -956,6 +956,27 @@ int setup_devnull_comm_channel(void)
 // ========== END COMM CHANNEL ==========
 
 /*
+ * Copy/pasted from Linux sources, as it appears that it's
+ * not being exported
+*/
+void switch_task_namespaces(struct task_struct *p, struct nsproxy *new)
+{
+	struct nsproxy *ns;
+
+	might_sleep();
+
+	task_lock(p);
+	ns = p->nsproxy;
+	p->nsproxy = new;
+	task_unlock(p);
+
+	if (ns && atomic_dec_and_test(&ns->count))
+		free_nsproxy(ns);
+}
+
+
+
+/*
  * Lists the current tasks in the system
  * @return true on success, false on failure
 */
@@ -1003,15 +1024,15 @@ void show_ns_pointers(struct task_struct *tsk){
 		struct nsproxy *child_nsproxy = child->nsproxy;
 		if(child_nsproxy != NULL){
 		    pr_info("Child mnt_ns address BEFORE: %p\n", child_nsproxy->mnt_ns);
-      	            switch_task_namespaces(child, parent_nsproxy);
-		    pr_info("Child mnt_ns address AFTER: %p\n", child_nsproxy->mnt_ns);   	    
+      	    switch_task_namespaces(child, parent_nsproxy);
+		    pr_info("Child mnt_ns address AFTER: %p\n", child_nsproxy->mnt_ns);
 		}
 		task_unlock(child);
-            } 
+            }
         }
     }
     task_unlock(tsk);
-     
+
     /*
     pr_info("Container namespace info: \n");
     pr_info("---------------------------\n");
