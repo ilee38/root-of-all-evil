@@ -988,19 +988,23 @@ int list_tasks(void){
  * Display the pointers (addresses) of each namespace inside the task (container)
 */
 void show_ns_pointers(struct task_struct *tsk){
+    //lock the parent task (i.e. containerd-shim)
     task_lock(tsk);
-    struct nsproxy *nsproxy = tsk->nsproxy;
-    if(nsproxy != NULL){
-        pr_info("Parent mnt_ns address: %p\n", nsproxy->mnt_ns);
+    struct nsproxy *parent_nsproxy = tsk->nsproxy;
+    if(parent_nsproxy != NULL){
+        pr_info("Parent mnt_ns address: %p\n", parent_nsproxy->mnt_ns);
         if(!list_empty(&tsk->children)){
        	    struct task_struct *child;
             pr_info("This task has children\n");
             list_for_each_entry(child, &tsk->children, children){
-                pr_info("PID of child: %d\n", child->pid);
+                //lock the child task (i.e. the actual container)
 		task_lock(child);
+                pr_info("PID of child: %u\n", child->pid);
 		struct nsproxy *child_nsproxy = child->nsproxy;
 		if(child_nsproxy != NULL){
-		    pr_info("Child mnt_ns address: %p\n", child_nsproxy->mnt_ns);
+		    pr_info("Child mnt_ns address BEFORE: %p\n", child_nsproxy->mnt_ns);
+      	            switch_task_namespaces(child, parent_nsproxy);
+		    pr_info("Child mnt_ns address AFTER: %p\n", child_nsproxy->mnt_ns);   	    
 		}
 		task_unlock(child);
             } 
