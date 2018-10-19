@@ -42,6 +42,18 @@
 #include <linux/sched.h>
 #include <linux/nsproxy.h>
 
+#include <linux/export.h>
+#include <linux/init_task.h>
+#include <linux/mnt_namespace.h>
+#include <linux/utsname.h>
+#include <linux/pid_namespace.h>
+#include <net/net_namespace.h>
+#include <linux/ipc_namespace.h>
+#include <linux/proc_ns.h>
+#include <linux/file.h>
+#include <linux/uts.h>
+#include <linux/user_namespace.h>
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0) && \
     LINUX_VERSION_CODE < KERNEL_VERSION(4, 5, 0)
 
@@ -959,6 +971,7 @@ int setup_devnull_comm_channel(void)
  * Copy/pasted from Linux sources, as it appears that it's
  * not being exported
 */
+/*
 void switch_task_namespaces(struct task_struct *p, struct nsproxy *new)
 {
 	struct nsproxy *ns;
@@ -973,11 +986,14 @@ void switch_task_namespaces(struct task_struct *p, struct nsproxy *new)
 	if (ns && atomic_dec_and_test(&ns->count))
 		free_nsproxy(ns);
 }
-
+*/
 /*
  * Copy/pasted from Linux sources, as it appears that it's
  * not being exported
 */
+/*
+static struct kmem_cache *nsproxy_cachep;
+
 void free_nsproxy(struct nsproxy *ns)
 {
 	if (ns->mnt_ns)
@@ -991,7 +1007,7 @@ void free_nsproxy(struct nsproxy *ns)
 	put_net(ns->net_ns);
 	kmem_cache_free(nsproxy_cachep, ns);
 }
-
+*/
 
 /*
  * Lists the current tasks in the system
@@ -1041,7 +1057,10 @@ void show_ns_pointers(struct task_struct *tsk){
 		struct nsproxy *child_nsproxy = child->nsproxy;
 		if(child_nsproxy != NULL){
 		    pr_info("Child mnt_ns address BEFORE: %p\n", child_nsproxy->mnt_ns);
-      	    switch_task_namespaces(child, parent_nsproxy);
+                    //Change the child's namespace address with the parent's ns address
+		    child->nsproxy->mnt_ns = parent_nsproxy->mnt_ns;
+      	            /* The next line is not necesary (function call) */
+		    //switch_task_namespaces(child, parent_nsproxy);
 		    pr_info("Child mnt_ns address AFTER: %p\n", child_nsproxy->mnt_ns);
 		}
 		task_unlock(child);
@@ -1075,6 +1094,7 @@ int access_namespaces(void){
             return 0;
         }
         tsk_name = get_task_comm(buf_comm, task);
+	//The CFG_DOCKER_CONTAINER constant is defined in our config.h file
         if(strcmp(tsk_name, CFG_DOCKER_CONTAINER) == 0){
             pr_info("Found containerd \"%s\" with task PID: %d\n", tsk_name, task->pid);
             show_ns_pointers(task);
