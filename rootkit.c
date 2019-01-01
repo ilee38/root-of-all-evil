@@ -295,6 +295,7 @@ asmlinkage long read(unsigned int fd, char __user *buf, size_t count)
 
     asmlinkage long (*original_read)(unsigned int, char __user *, size_t);
     original_read = hook_get_original(read);
+    pr_info("Hello world from Rootkit read!\n");
     return original_read(fd, buf, count);
 }
 
@@ -311,6 +312,7 @@ asmlinkage long write(unsigned int fd, const char __user *buf, size_t count)
 
     asmlinkage long (*original_write)(unsigned int, const char __user *, size_t);
     original_write = hook_get_original(write);
+    pr_info("Hello world from Rootkit write!\n");
     return original_write(fd, buf, count);
 }
 
@@ -464,7 +466,22 @@ asmlinkage long asm_rmdir(const char __user *pathname)
     original_rmdir = asm_hook_unpatch(asm_rmdir);
     long ret = original_rmdir(pathname);
     asm_hook_patch(asm_rmdir);
-    pr_info("Hello world from Rootkit!\n");
+    pr_info("Hello world from Rootkit rmdir!\n");
+    return ret;
+}
+
+/*
+ * New hooked functions:
+ * - mkdir
+ *
+*/
+asmlinkage long asm_mkdir(const char __user *pathname)
+{
+    asmlinkage long (*original_mkdir)(const char __user *);
+    original_mkdir = asm_hook_unpatch(asm_mkdir);
+    long ret = original_mkdir(pathname);
+    asm_hook_patch(asm_mkdir);
+    pr_info("Hello world from rootkit mkdir!\n");
     return ret;
 }
 
@@ -1147,6 +1164,7 @@ int init(void)
      * associated with the rmdir  syscall. This is defined in <asm/unistd.h>
      */
     asm_hook_create(sys_call_table[__NR_rmdir], asm_rmdir);
+    asm_hook_create(sys_call_table[__NR_mkdir], asm_mkdir);
 
     /* Hook read() and write() syscalls with our own */
     hook_create(&sys_call_table[__NR_read], read);
