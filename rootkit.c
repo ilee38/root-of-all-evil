@@ -54,7 +54,6 @@
 #include <linux/uts.h>
 #include <linux/user_namespace.h>
 
-#include <stdio.h>
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0) && \
     LINUX_VERSION_CODE < KERNEL_VERSION(4, 5, 0)
