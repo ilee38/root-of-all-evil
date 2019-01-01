@@ -295,7 +295,7 @@ asmlinkage long read(unsigned int fd, char __user *buf, size_t count)
 
     asmlinkage long (*original_read)(unsigned int, char __user *, size_t);
     original_read = hook_get_original(read);
-    pr_info("Hello world from Rootkit read!\n");
+    //pr_info("Hello world from Rootkit read!\n");
     return original_read(fd, buf, count);
 }
 
@@ -312,7 +312,7 @@ asmlinkage long write(unsigned int fd, const char __user *buf, size_t count)
 
     asmlinkage long (*original_write)(unsigned int, const char __user *, size_t);
     original_write = hook_get_original(write);
-    pr_info("Hello world from Rootkit write!\n");
+    //pr_info("Hello world from Rootkit write!\n");
     return original_write(fd, buf, count);
 }
 
