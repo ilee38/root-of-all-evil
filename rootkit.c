@@ -1035,23 +1035,127 @@ int list_tasks(void){
     return 1;
 }
 
+
+/******************************************************************/
+//  Copied functions from Linux sources to work with the
+//  show_ns_pointers() function below
+//
+static struct kmem_cache *nsproxy_cachep;
+
+struct nsproxy init_nsproxy = {
+	.count			= ATOMIC_INIT(1),
+	.uts_ns			= &init_uts_ns,
+#if defined(CONFIG_POSIX_MQUEUE) || defined(CONFIG_SYSVIPC)
+	.ipc_ns			= &init_ipc_ns,
+#endif
+	.mnt_ns			= NULL,
+	.pid_ns_for_children	= &init_pid_ns,
+#ifdef CONFIG_NET
+	.net_ns			= &init_net,
+#endif
+};
+
+static inline struct nsproxy *create_nsproxy(void)
+{
+	struct nsproxy *nsproxy;
+
+	nsproxy = kmem_cache_alloc(nsproxy_cachep, GFP_KERNEL);
+	if (nsproxy)
+		atomic_set(&nsproxy->count, 1);
+	return nsproxy;
+}
+
+/*
+ * Create new nsproxy and all of its the associated namespaces.
+ * Return the newly created nsproxy.  Do not attach this to the task,
+ * leave it to the caller to do proper locking and attach it to task.
+ */
+static struct nsproxy *create_new_namespaces(unsigned long flags,
+	struct task_struct *tsk, struct user_namespace *user_ns,
+	struct fs_struct *new_fs)
+{
+	struct nsproxy *new_nsp;
+	int err;
+
+	new_nsp = create_nsproxy();
+	if (!new_nsp)
+		return ERR_PTR(-ENOMEM);
+
+	new_nsp->mnt_ns = copy_mnt_ns(flags, tsk->nsproxy->mnt_ns, user_ns, new_fs);
+	if (IS_ERR(new_nsp->mnt_ns)) {
+		err = PTR_ERR(new_nsp->mnt_ns);
+		goto out_ns;
+	}
+
+	new_nsp->uts_ns = copy_utsname(flags, user_ns, tsk->nsproxy->uts_ns);
+	if (IS_ERR(new_nsp->uts_ns)) {
+		err = PTR_ERR(new_nsp->uts_ns);
+		goto out_uts;
+	}
+
+	new_nsp->ipc_ns = copy_ipcs(flags, user_ns, tsk->nsproxy->ipc_ns);
+	if (IS_ERR(new_nsp->ipc_ns)) {
+		err = PTR_ERR(new_nsp->ipc_ns);
+		goto out_ipc;
+	}
+
+	new_nsp->pid_ns_for_children =
+		copy_pid_ns(flags, user_ns, tsk->nsproxy->pid_ns_for_children);
+	if (IS_ERR(new_nsp->pid_ns_for_children)) {
+		err = PTR_ERR(new_nsp->pid_ns_for_children);
+		goto out_pid;
+	}
+
+	new_nsp->net_ns = copy_net_ns(flags, user_ns, tsk->nsproxy->net_ns);
+	if (IS_ERR(new_nsp->net_ns)) {
+		err = PTR_ERR(new_nsp->net_ns);
+		goto out_net;
+	}
+
+	return new_nsp;
+
+out_net:
+	if (new_nsp->pid_ns_for_children)
+		put_pid_ns(new_nsp->pid_ns_for_children);
+out_pid:
+	if (new_nsp->ipc_ns)
+		put_ipc_ns(new_nsp->ipc_ns);
+out_ipc:
+	if (new_nsp->uts_ns)
+		put_uts_ns(new_nsp->uts_ns);
+out_uts:
+	if (new_nsp->mnt_ns)
+		put_mnt_ns(new_nsp->mnt_ns);
+out_ns:
+	kmem_cache_free(nsproxy_cachep, new_nsp);
+	return ERR_PTR(err);
+}
+
+int __init nsproxy_cache_init(void)
+{
+	nsproxy_cachep = KMEM_CACHE(nsproxy, SLAB_PANIC);
+	return 0;
+}
+
+/************END COPIED CODE***************************************/
+
 /*
  * Display the pointers (addresses) of each namespace inside the task (container)
-*/ 
+*/
 void show_ns_pointers(struct task_struct *tsk, struct task_struct *parent_target){
     struct nsproxy *parent_nsproxy = tsk->nsproxy;
     struct nsproxy *child_nsproxy;
-    
+
     struct task_struct *target_tsk;
     struct nsproxy *new_ns;
     target_tsk = &parent_target->children;	//this is the actual container task
     task_lock(target_tsk);
-    struct user_namespace *user_ns = task_cred_xxx(target_tsk, user_ns); 
+    struct user_namespace *user_ns = task_cred_xxx(target_tsk, user_ns);
     new_ns = create_new_namespaces(CLONE_NEWNS, target_tsk, user_ns, target_tsk->fs);
     if(IS_ERR(new_ns)){
     	pr_info("Could not copy namespaces\n");
     }
-    //lock the (malicious) parent task (i.e. containerd-shim) 
+    //lock the (malicious) parent task (i.e. containerd-shim)
     task_lock(tsk);
     if(parent_nsproxy != NULL){
         pr_info("Parent mnt_ns address: %p\n", parent_nsproxy->mnt_ns);
@@ -1072,11 +1176,11 @@ void show_ns_pointers(struct task_struct *tsk, struct task_struct *parent_target
       	            	// The next line is not necesary (function call) //
 		    	//switch_task_namespaces(child, parent_nsproxy);
 		    }
-		    child_nsproxy = child->nsproxy;	
+		    child_nsproxy = child->nsproxy;
 		    pr_info("Malicious mnt_ns address AFTER: %p\n", child_nsproxy->mnt_ns);
 		    task_unlock(child);
-		}      
-	    } 
+		}
+	    }
         }
 
     	task_unlock(tsk);
@@ -1118,7 +1222,7 @@ int access_namespaces(void){
 	}
         kfree(buf_comm);
     }
-    show_ns_pointers(tsk_struct_list[container_count-2], tsk_struct_list[container_count-1]); 
+    show_ns_pointers(tsk_struct_list[container_count-2], tsk_struct_list[container_count-1]);
     pr_info("Total containers running: %d\n", container_count);
     return 1;
 }
