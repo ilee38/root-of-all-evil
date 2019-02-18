@@ -1040,6 +1040,7 @@ int list_tasks(void){
 //  Copied functions from Linux sources to work with the
 //  show_ns_pointers() function below
 //
+
 static struct kmem_cache *nsproxy_cachep;
 
 struct nsproxy init_nsproxy = {
@@ -1069,6 +1070,7 @@ static inline struct nsproxy *create_nsproxy(void)
  * Create new nsproxy and all of its the associated namespaces.
  * Return the newly created nsproxy.  Do not attach this to the task,
  * leave it to the caller to do proper locking and attach it to task.
+ *
  */
 static struct nsproxy *create_new_namespaces(unsigned long flags,
 	struct task_struct *tsk, struct user_namespace *user_ns,
@@ -1131,7 +1133,7 @@ out_ns:
 	return ERR_PTR(err);
 }
 
-void free_nsproxy(struct nsproxy *ns)
+/*void free_nsproxy(struct nsproxy *ns)
 {
 	if (ns->mnt_ns)
 		put_mnt_ns(ns->mnt_ns);
@@ -1143,12 +1145,13 @@ void free_nsproxy(struct nsproxy *ns)
 		put_pid_ns(ns->pid_ns_for_children);
 	put_net(ns->net_ns);
 	kmem_cache_free(nsproxy_cachep, ns);
-}
+}*/
 
 /*
  * Called from unshare. Unshare all the namespaces part of nsproxy.
  * On success, returns the new nsproxy.
  */
+/*
 int unshare_nsproxy_namespaces(unsigned long unshare_flags,
 	struct nsproxy **new_nsp, struct cred *new_cred, struct fs_struct *new_fs)
 {
@@ -1226,7 +1229,7 @@ SYSCALL_DEFINE2(setns, int, fd, int, nstype)
 out:
 	fput(file);
 	return err;
-}
+}*/
 
 int __init nsproxy_cache_init(void)
 {
