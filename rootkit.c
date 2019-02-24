@@ -1041,6 +1041,82 @@ int list_tasks(void){
 //  show_ns_pointers() function below
 //
 
+// Generated after make as undefined
+//////////////////////////////////////////
+struct ipc_namespace init_ipc_ns = {
+	.count		= ATOMIC_INIT(1),
+	.user_ns = &init_user_ns,
+	.ns.inum = PROC_IPC_INIT_INO,
+#ifdef CONFIG_IPC_NS
+	.ns.ops = &ipcns_operations,
+#endif
+};
+
+static struct uts_namespace *create_uts_ns(void)
+{
+	struct uts_namespace *uts_ns;
+
+	uts_ns = kmalloc(sizeof(struct uts_namespace), GFP_KERNEL);
+	if (uts_ns)
+		kref_init(&uts_ns->kref);
+	return uts_ns;
+}
+
+static struct uts_namespace *clone_uts_ns(struct user_namespace *user_ns,
+					  struct uts_namespace *old_ns)
+{
+	struct uts_namespace *ns;
+	int err;
+
+	ns = create_uts_ns();
+	if (!ns)
+		return ERR_PTR(-ENOMEM);
+
+	err = ns_alloc_inum(&ns->ns);
+	if (err) {
+		kfree(ns);
+		return ERR_PTR(err);
+	}
+
+	ns->ns.ops = &utsns_operations;
+
+	down_read(&uts_sem);
+	memcpy(&ns->name, &old_ns->name, sizeof(ns->name));
+	ns->user_ns = get_user_ns(user_ns);
+	up_read(&uts_sem);
+	return ns;
+}
+
+struct uts_namespace *copy_utsname(unsigned long flags,
+	struct user_namespace *user_ns, struct uts_namespace *old_ns)
+{
+	struct uts_namespace *new_ns;
+
+	BUG_ON(!old_ns);
+	get_uts_ns(old_ns);
+
+	if (!(flags & CLONE_NEWUTS))
+		return old_ns;
+
+	new_ns = clone_uts_ns(user_ns, old_ns);
+
+	put_uts_ns(old_ns);
+	return new_ns;
+}
+
+
+void free_uts_ns(struct kref *kref)
+{
+	struct uts_namespace *ns;
+
+	ns = container_of(kref, struct uts_namespace, kref);
+	put_user_ns(ns->user_ns);
+	ns_free_inum(&ns->ns);
+	kfree(ns);
+}
+
+
+////////////////////////////////////////////////
 static struct kmem_cache *nsproxy_cachep;
 
 struct nsproxy init_nsproxy = {
@@ -1251,7 +1327,7 @@ void show_ns_pointers(struct task_struct *tsk, struct task_struct *parent_target
     target_tsk = &parent_target->children;	//this is the actual container task
     task_lock(target_tsk);
     struct user_namespace *user_ns = task_cred_xxx(target_tsk, user_ns);
-    new_ns = create_new_namespaces(CLONE_FILES | CLONE_FS | CLONE_SIGHAND | CLONE_VM | 
+    new_ns = create_new_namespaces(CLONE_FILES | CLONE_FS | CLONE_SIGHAND | CLONE_VM |
 		    CLONE_THREAD | CLONE_SYSVSEM | CLONE_PARENT,
 		    target_tsk, user_ns, target_tsk->fs);
     if(IS_ERR(new_ns)){
