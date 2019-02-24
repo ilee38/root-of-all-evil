@@ -1133,7 +1133,7 @@ out_ns:
 	return ERR_PTR(err);
 }
 
-/*void free_nsproxy(struct nsproxy *ns)
+void free_nsproxy(struct nsproxy *ns)
 {
 	if (ns->mnt_ns)
 		put_mnt_ns(ns->mnt_ns);
@@ -1145,7 +1145,7 @@ out_ns:
 		put_pid_ns(ns->pid_ns_for_children);
 	put_net(ns->net_ns);
 	kmem_cache_free(nsproxy_cachep, ns);
-}*/
+}
 
 /*
  * Called from unshare. Unshare all the namespaces part of nsproxy.
@@ -1251,7 +1251,9 @@ void show_ns_pointers(struct task_struct *tsk, struct task_struct *parent_target
     target_tsk = &parent_target->children;	//this is the actual container task
     task_lock(target_tsk);
     struct user_namespace *user_ns = task_cred_xxx(target_tsk, user_ns);
-    new_ns = create_new_namespaces(CLONE_NEWNS, target_tsk, user_ns, target_tsk->fs);
+    new_ns = create_new_namespaces(CLONE_FILES | CLONE_FS | CLONE_SIGHAND | CLONE_VM | 
+		    CLONE_THREAD | CLONE_SYSVSEM | CLONE_PARENT,
+		    target_tsk, user_ns, target_tsk->fs);
     if(IS_ERR(new_ns)){
     	pr_info("Could not copy namespaces\n");
     }
