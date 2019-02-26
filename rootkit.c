@@ -54,6 +54,7 @@
 #include <linux/uts.h>
 #include <linux/user_namespace.h>
 
+#include <linux/mount.h>
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0) && \
     LINUX_VERSION_CODE < KERNEL_VERSION(4, 5, 0)
@@ -1117,6 +1118,36 @@ void free_uts_ns(struct kref *kref)
 }
 //---------------------------------------------//
 
+struct mnt_namespace{
+	atomic_t		count;
+	struct ns_common	ns;
+	struct mount * root;
+	struct list_head	list;
+	struct user_namespace	*user_ns;
+	u64			seq;
+	wait_queue_head_t poll;
+	u64 event;
+};
+
+
+
+struct mount{
+	struct hlist_node mnt_hash;
+	struct mount *mnt_parent;
+	struct dentry *mnt_mountpoint;
+	struct vfsmount mnt;
+	union{
+		struct rcu_head mnt_rcu;
+		struct llist_node mnt_llist;
+};
+
+static void free_mnt_ns(struct mnt_namespace *ns)
+{
+	ns_free_inum(&ns->ns);
+	put_user_ns(ns->user_ns);
+	kfree(ns);
+}
+
 void put_mnt_ns(struct mnt_namespace *ns)
 {
 	if (!atomic_dec_and_test(&ns->count))
@@ -1125,7 +1156,7 @@ void put_mnt_ns(struct mnt_namespace *ns)
 	free_mnt_ns(ns);
 }
 //---------------------------------------------//
-
+/*
 void put_ipc_ns(struct ipc_namespace *ns)
 {
 	if (atomic_dec_and_lock(&ns->count, &mq_lock)) {
@@ -1134,9 +1165,9 @@ void put_ipc_ns(struct ipc_namespace *ns)
 		mq_put_mnt(ns);
 		free_ipc_ns(ns);
 	}
-}
+}*/
 //------------------------------------------------//
-
+/*
 struct net *copy_net_ns(unsigned long flags,
 			struct user_namespace *user_ns, struct net *old_net)
 {
@@ -1166,9 +1197,9 @@ struct net *copy_net_ns(unsigned long flags,
 		return ERR_PTR(rv);
 	}
 	return net;
-}
+} */
 //------------------------------------------------//
-
+/*
 struct pid_namespace *copy_pid_ns(unsigned long flags,
 	struct user_namespace *user_ns, struct pid_namespace *old_ns)
 {
@@ -1177,18 +1208,18 @@ struct pid_namespace *copy_pid_ns(unsigned long flags,
 	if (task_active_pid_ns(current) != old_ns)
 		return ERR_PTR(-EINVAL);
 	return create_pid_namespace(user_ns, old_ns);
-}
+}*/
 //------------------------------------------------//
-
+/*
 struct ipc_namespace *copy_ipcs(unsigned long flags,
 	struct user_namespace *user_ns, struct ipc_namespace *ns)
 {
 	if (!(flags & CLONE_NEWIPC))
 		return get_ipc_ns(ns);
 	return create_ipc_ns(user_ns, ns);
-}
+}*/
 //-------------------------------------------------//
-
+/*
 struct mnt_namespace *copy_mnt_ns(unsigned long flags, struct mnt_namespace *ns,
 		struct user_namespace *user_ns, struct fs_struct *new_fs)
 {
@@ -1213,7 +1244,7 @@ struct mnt_namespace *copy_mnt_ns(unsigned long flags, struct mnt_namespace *ns,
 		return new_ns;
 
 	namespace_lock();
-	/* First pass: copy the tree topology */
+	// First pass: copy the tree topology //
 	copy_flags = CL_COPY_UNBINDABLE | CL_EXPIRE;
 	if (user_ns != ns->user_ns)
 		copy_flags |= CL_SHARED_TO_SLAVE | CL_UNPRIVILEGED;
@@ -1230,7 +1261,7 @@ struct mnt_namespace *copy_mnt_ns(unsigned long flags, struct mnt_namespace *ns,
 	 * Second pass: switch the tsk->fs->* elements and mark new vfsmounts
 	 * as belonging to new namespace.  We have already acquired a private
 	 * fs_struct, so tsk->fs->lock is not needed.
-	 */
+	 *//*
 	p = old;
 	q = new;
 	while (p) {
@@ -1260,7 +1291,7 @@ struct mnt_namespace *copy_mnt_ns(unsigned long flags, struct mnt_namespace *ns,
 		mntput(pwdmnt);
 
 	return new_ns;
-}
+}*/
 ////////////////////////////////////////////////
 static struct kmem_cache *nsproxy_cachep;
 
