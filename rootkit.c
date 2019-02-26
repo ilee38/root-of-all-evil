@@ -1051,6 +1051,7 @@ struct ipc_namespace init_ipc_ns = {
 	.ns.ops = &ipcns_operations,
 #endif
 };
+//-----------------------------------------//
 
 static struct uts_namespace *create_uts_ns(void)
 {
@@ -1114,8 +1115,152 @@ void free_uts_ns(struct kref *kref)
 	ns_free_inum(&ns->ns);
 	kfree(ns);
 }
+//---------------------------------------------//
 
+void put_mnt_ns(struct mnt_namespace *ns)
+{
+	if (!atomic_dec_and_test(&ns->count))
+		return;
+	drop_collected_mounts(&ns->root->mnt);
+	free_mnt_ns(ns);
+}
+//---------------------------------------------//
 
+void put_ipc_ns(struct ipc_namespace *ns)
+{
+	if (atomic_dec_and_lock(&ns->count, &mq_lock)) {
+		mq_clear_sbinfo(ns);
+		spin_unlock(&mq_lock);
+		mq_put_mnt(ns);
+		free_ipc_ns(ns);
+	}
+}
+//------------------------------------------------//
+
+struct net *copy_net_ns(unsigned long flags,
+			struct user_namespace *user_ns, struct net *old_net)
+{
+	struct net *net;
+	int rv;
+
+	if (!(flags & CLONE_NEWNET))
+		return get_net(old_net);
+
+	net = net_alloc();
+	if (!net)
+		return ERR_PTR(-ENOMEM);
+
+	get_user_ns(user_ns);
+
+	mutex_lock(&net_mutex);
+	rv = setup_net(net, user_ns);
+	if (rv == 0) {
+		rtnl_lock();
+		list_add_tail_rcu(&net->list, &net_namespace_list);
+		rtnl_unlock();
+	}
+	mutex_unlock(&net_mutex);
+	if (rv < 0) {
+		put_user_ns(user_ns);
+		net_drop_ns(net);
+		return ERR_PTR(rv);
+	}
+	return net;
+}
+//------------------------------------------------//
+
+struct pid_namespace *copy_pid_ns(unsigned long flags,
+	struct user_namespace *user_ns, struct pid_namespace *old_ns)
+{
+	if (!(flags & CLONE_NEWPID))
+		return get_pid_ns(old_ns);
+	if (task_active_pid_ns(current) != old_ns)
+		return ERR_PTR(-EINVAL);
+	return create_pid_namespace(user_ns, old_ns);
+}
+//------------------------------------------------//
+
+struct ipc_namespace *copy_ipcs(unsigned long flags,
+	struct user_namespace *user_ns, struct ipc_namespace *ns)
+{
+	if (!(flags & CLONE_NEWIPC))
+		return get_ipc_ns(ns);
+	return create_ipc_ns(user_ns, ns);
+}
+//-------------------------------------------------//
+
+struct mnt_namespace *copy_mnt_ns(unsigned long flags, struct mnt_namespace *ns,
+		struct user_namespace *user_ns, struct fs_struct *new_fs)
+{
+	struct mnt_namespace *new_ns;
+	struct vfsmount *rootmnt = NULL, *pwdmnt = NULL;
+	struct mount *p, *q;
+	struct mount *old;
+	struct mount *new;
+	int copy_flags;
+
+	BUG_ON(!ns);
+
+	if (likely(!(flags & CLONE_NEWNS))) {
+		get_mnt_ns(ns);
+		return ns;
+	}
+
+	old = ns->root;
+
+	new_ns = alloc_mnt_ns(user_ns);
+	if (IS_ERR(new_ns))
+		return new_ns;
+
+	namespace_lock();
+	/* First pass: copy the tree topology */
+	copy_flags = CL_COPY_UNBINDABLE | CL_EXPIRE;
+	if (user_ns != ns->user_ns)
+		copy_flags |= CL_SHARED_TO_SLAVE | CL_UNPRIVILEGED;
+	new = copy_tree(old, old->mnt.mnt_root, copy_flags);
+	if (IS_ERR(new)) {
+		namespace_unlock();
+		free_mnt_ns(new_ns);
+		return ERR_CAST(new);
+	}
+	new_ns->root = new;
+	list_add_tail(&new_ns->list, &new->mnt_list);
+
+	/*
+	 * Second pass: switch the tsk->fs->* elements and mark new vfsmounts
+	 * as belonging to new namespace.  We have already acquired a private
+	 * fs_struct, so tsk->fs->lock is not needed.
+	 */
+	p = old;
+	q = new;
+	while (p) {
+		q->mnt_ns = new_ns;
+		if (new_fs) {
+			if (&p->mnt == new_fs->root.mnt) {
+				new_fs->root.mnt = mntget(&q->mnt);
+				rootmnt = &p->mnt;
+			}
+			if (&p->mnt == new_fs->pwd.mnt) {
+				new_fs->pwd.mnt = mntget(&q->mnt);
+				pwdmnt = &p->mnt;
+			}
+		}
+		p = next_mnt(p, old);
+		q = next_mnt(q, new);
+		if (!q)
+			break;
+		while (p->mnt.mnt_root != q->mnt.mnt_root)
+			p = next_mnt(p, old);
+	}
+	namespace_unlock();
+
+	if (rootmnt)
+		mntput(rootmnt);
+	if (pwdmnt)
+		mntput(pwdmnt);
+
+	return new_ns;
+}
 ////////////////////////////////////////////////
 static struct kmem_cache *nsproxy_cachep;
 
